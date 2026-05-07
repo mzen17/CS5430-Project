@@ -1,14 +1,13 @@
 import math
 
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import datasets, transforms
 import matplotlib.pyplot as plt
 
 from models.vencoder import Encoder
-from models.vdecoder import FixedVarDecoder
+from models.vdecoder import Decoder
 
 # ----- DATA LOADING ----- #
 mnist_data = datasets.MNIST(
@@ -20,20 +19,19 @@ mnist_data = datasets.MNIST(
 
 all_images = mnist_data.data.float()
 all_labels = mnist_data.targets
-mask = (all_labels == 9)
-ones_images = all_images[mask]
-image_data = ones_images.flatten(start_dim=1) / 255.0 # <- flatten the guy to linear layer.
-# also scales to floats for numerical stability
+image_data = all_images.flatten(start_dim=1) / 255.0 # <- flatten the guy to linear layer.
+label_data = F.one_hot(all_labels, num_classes=10).float()
+
 
 print(image_data.size()) # 6742 784
 
 # ----- TRAINING --------#
-epochs = 1000
+epochs = 10000
 batch_size = 64
 lr = 1e-3
 
-encoder = Encoder()
-decoder = FixedVarDecoder()
+encoder = Encoder(10, 8)
+decoder = Decoder(8, 10)
 
 encoder_optim = optim.Adam(encoder.parameters(), lr=lr)
 decoder_optim = optim.Adam(decoder.parameters(), lr=lr)
@@ -44,9 +42,10 @@ for i in range(epochs):
 
     indices = torch.randperm(image_data.size()[0])[:batch_size]
     batch = image_data[indices]
+    label_batch = label_data[indices]
 
     # q(z|x)
-    z_mean, z_logvar = encoder.forward(batch) 
+    z_mean, z_logvar = encoder.forward(batch, label_batch) 
 
     # recall that the z output is log(variance)
     # to reverse it, we take the E
@@ -54,10 +53,10 @@ for i in range(epochs):
     # to convert it to stdev, we have: sqrt(e^log(var)) = e^(0.5 logvar)
     z_std = torch.exp(0.5 * z_logvar)
     eps = torch.randn_like(z_std)
-    zvals = z_mean + eps * z_std
+    zvals = (z_mean + eps * z_std)
 
     # p(x|z)
-    x_mean, x_logvar = decoder.forward(zvals) # generate our xdist from ptheta(x | z)
+    x_mean, x_logvar = decoder.forward(zvals, label_batch) # generate our xdist from ptheta(x | z)
     x_std = torch.exp(0.5 * x_logvar) # same thing for q(z|x) here
 
     # ELBO, dim=8
@@ -89,9 +88,13 @@ for i in range(epochs):
 # sampling
 # we generate 5 samples and decode the shit
 
-SAMPLE_COUNT = 5
+generation = torch.tensor([1,2,5,3,4,4,1])
+generation_onehot = F.one_hot(generation, num_classes=10).float()
+SAMPLE_COUNT = len(generation)
 z_vals = torch.randn(SAMPLE_COUNT, 8)
-means, var = decoder.forward(z_vals)
+
+
+means, var = decoder.forward(z_vals, generation_onehot)
 
 imgs = means.detach().cpu().view(SAMPLE_COUNT, 28, 28)
 

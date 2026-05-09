@@ -24,8 +24,8 @@ label_data = F.one_hot(all_labels, num_classes=10).float()
 print(image_data.size())
 
 # ----- TRAINING --------#
-epochs = 10000
-it_steps = 50
+epochs = 1000
+it_steps = 100
 batch_size = 64
 lr = 1e-3
 lg_lr = 1e-4
@@ -37,6 +37,8 @@ lg_lr = 1e-4
 decoder = Decoder(8, 10)
 decoder_optim = optim.Adam(decoder.parameters(), lr=lr)
 
+z_bank = torch.randn(len(image_data), 8) # <- persistent z banks for the guys
+
 for i in range(epochs):
     decoder_optim.zero_grad()
 
@@ -44,7 +46,7 @@ for i in range(epochs):
     batch = image_data[indices]
     label_batch = label_data[indices]
 
-    z = torch.randn(batch_size, 8, requires_grad=True) # <- summon a random vector similar to our latent.
+    z = z_bank[indices].clone().detach().requires_grad_(True)
     
     #---- E STEP ----#
     for j in range(it_steps):
@@ -74,12 +76,14 @@ for i in range(epochs):
     z = z.detach()
     decoder_optim.zero_grad() # <- reset the guy just for safety
 
-    model_output, variance = decoder(z, label_batch)
+    model_output, logvar = decoder(z, label_batch)
 
     batch_loss = 0.5 * (
-        variance + ((batch - model_output) ** 2) / torch.exp(variance)
+        logvar + ((batch - model_output) ** 2) / torch.exp(logvar)
     ).sum(dim=1).mean()
     batch_loss.backward()
+
+    z_bank[indices] = z.detach()
 
     if i % 10 == 0:
         print(f"Epoch {i} loss: {batch_loss}")

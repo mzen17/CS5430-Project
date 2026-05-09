@@ -1,3 +1,4 @@
+## ELBO Loss, Minibatch
 import math
 
 import torch
@@ -26,7 +27,7 @@ label_data = F.one_hot(all_labels, num_classes=10).float()
 print(image_data.size()) # 6742 784
 
 # ----- TRAINING --------#
-epochs = 10000
+epochs = 10000 # <- actually mini batches but.
 batch_size = 64
 lr = 1e-3
 

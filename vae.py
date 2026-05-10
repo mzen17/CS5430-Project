@@ -9,30 +9,32 @@ import matplotlib.pyplot as plt
 
 from models.vencoder import Encoder
 from models.vdecoder import Decoder
+import torch
+
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 # ----- DATA LOADING ----- #
 mnist_data = datasets.MNIST(
     root='./data', 
     train=True, 
     download=True, 
-    transform=transforms.ToTensor()
+    transform=transforms.ToTensor(),
 )
 
 all_images = mnist_data.data.float()
 all_labels = mnist_data.targets
-image_data = all_images.flatten(start_dim=1) / 255.0 # <- flatten the guy to linear layer.
-label_data = F.one_hot(all_labels, num_classes=10).float()
+image_data = (all_images.flatten(start_dim=1) / 255.0).to(device) # <- flatten the guy to linear layer.
+label_data = F.one_hot(all_labels, num_classes=10).float().to(device)
 
-
-print(image_data.size()) # 6742 784
+print(image_data.size()) # 60000 784
 
 # ----- TRAINING --------#
-epochs = 10000 # <- actually mini batches but.
-batch_size = 64
+epochs = 10000 # <- actually mini batches.
+batch_size =128
 lr = 1e-3
 
-encoder = Encoder(10, 8)
-decoder = Decoder(8, 10)
+encoder = Encoder(10, 8).to(device)
+decoder = Decoder(8, 10, device).to(device)
 
 encoder_optim = optim.Adam(encoder.parameters(), lr=lr)
 decoder_optim = optim.Adam(decoder.parameters(), lr=lr)
@@ -53,8 +55,8 @@ for i in range(epochs):
     # variance = e^(logvar)
     # to convert it to stdev, we have: sqrt(e^log(var)) = e^(0.5 logvar)
     z_std = torch.exp(0.5 * z_logvar)
-    eps = torch.randn_like(z_std)
-    zvals = (z_mean + eps * z_std)
+    noise = torch.randn_like(z_std, device=device)
+    zvals = (z_mean + noise * z_std)
 
     # p(x|z)
     x_mean, x_logvar = decoder.forward(zvals, label_batch) # generate our xdist from ptheta(x | z)
@@ -89,20 +91,20 @@ for i in range(epochs):
 # sampling
 # we generate 5 samples and decode the shit
 
-generation = torch.tensor([1,2,5,3,4,4,1])
-generation_onehot = F.one_hot(generation, num_classes=10).float()
+generation = torch.tensor([1,2,5,3,4,4,1], device=device)
+generation_onehot = F.one_hot(generation, num_classes=10).float().to(device)
 SAMPLE_COUNT = len(generation)
-z_vals = torch.randn(SAMPLE_COUNT, 8)
+z_vals = torch.randn(SAMPLE_COUNT, 8, device=device)
 
 
 means, var = decoder.forward(z_vals, generation_onehot)
 
-imgs = means.detach().cpu().view(SAMPLE_COUNT, 28, 28)
+imgs = means.detach().view(SAMPLE_COUNT, 28, 28)
 
 fig, axes = plt.subplots(1, SAMPLE_COUNT, figsize=(15, 3))
 
 for i in range(SAMPLE_COUNT):
-    axes[i].imshow(imgs[i], cmap='gray')
+    axes[i].imshow(imgs[i].cpu(), cmap='gray')
     axes[i].axis('off')
     axes[i].set_title(f"Sample {i+1}")
 

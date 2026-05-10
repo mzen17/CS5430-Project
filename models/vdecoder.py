@@ -7,14 +7,14 @@ import torch.nn.functional as F
 # works interestingly.
 # given z, predict mean and var of p
 class Decoder(nn.Module):
-    def __init__(self, latent_dim, class_count):
+    def __init__(self, latent_dim, class_count, device="cpu"):
         super().__init__()
 
         self.fc1 = nn.Linear(latent_dim + class_count, 64)
         self.h = F.relu
 
         self.mean = nn.Linear(64, 784)
-        self.logvar = torch.zeros(1, 784)
+        self.logvar = torch.zeros(1, 784, device=device)
         # NO VARIANCE
         # fixed variance of 1
 

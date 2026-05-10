@@ -14,17 +14,17 @@ mnist_data = datasets.MNIST(
     download=True, 
     transform=transforms.ToTensor()
 )
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 all_images = mnist_data.data.float()
 all_labels = mnist_data.targets
-image_data = all_images.flatten(start_dim=1) / 255.0 # <- flatten the guy to linear layer.
-label_data = F.one_hot(all_labels, num_classes=10).float()
-
+image_data = (all_images.flatten(start_dim=1) / 255.0).to(device) # <- flatten the guy to linear layer.
+label_data = F.one_hot(all_labels, num_classes=10).float().to(device)
 
 print(image_data.size())
 
 # ----- TRAINING --------#
-epochs = 1000
+epochs = 10000
 it_steps = 100
 batch_size = 64
 lr = 1e-3
@@ -34,10 +34,10 @@ lg_lr = 1e-4
 # we only need the decoder
 # encoder = Encoder(10, 8)
 #encoder_optim = optim.Adam(encoder.parameters(), lr=lr)
-decoder = Decoder(8, 10)
+decoder = Decoder(8, 10, device=device).to(device)
 decoder_optim = optim.Adam(decoder.parameters(), lr=lr)
 
-z_bank = torch.randn(len(image_data), 8) # <- persistent z banks for the guys
+z_bank = torch.randn(len(image_data), 8).to(device) # <- persistent z banks for the guys
 
 for i in range(epochs):
     decoder_optim.zero_grad()
@@ -91,21 +91,25 @@ for i in range(epochs):
     decoder_optim.step()
 
 # sampling
-generation = torch.tensor([1,2,5,3,4,4,1])
-generation_onehot = F.one_hot(generation, num_classes=10).float()
+generation = torch.tensor([1,2,5,3,4,4,1]).to(device)
+generation_onehot = F.one_hot(generation, num_classes=10).float().to(device)
 SAMPLE_COUNT = len(generation)
-z_vals = torch.randn(SAMPLE_COUNT, 8)
+z_vals = torch.randn(SAMPLE_COUNT, 8, device=device)
 
 means, var = decoder.forward(z_vals, generation_onehot)
 
-imgs = means.detach().cpu().view(SAMPLE_COUNT, 28, 28)
+imgs = means.detach().view(SAMPLE_COUNT, 28, 28)
 
 fig, axes = plt.subplots(1, SAMPLE_COUNT, figsize=(15, 3))
 
 for i in range(SAMPLE_COUNT):
-    axes[i].imshow(imgs[i], cmap='gray')
+    axes[i].imshow(imgs[i].cpu(), cmap='gray')
     axes[i].axis('off')
     axes[i].set_title(f"Sample {i+1}")
-
+with torch.no_grad():
+    print("z_bank mean:", z_bank.mean(dim=0))
+    print("z_bank std:", z_bank.std(dim=0))
+    print("z_bank norm mean:", z_bank.norm(dim=1).mean())
+    print("standard normal norm expected ~", 8 ** 0.5)
 plt.tight_layout()
 plt.savefig('img.png')

@@ -15,4 +15,4 @@ To run an individual component:
 
 ```uv run python lla.py``` (depends on lem.py run)
 
-Note: The paper was ran with epochs at 10000 epochs for VAE, but is set to 1000 default. The iterations of langevin is also set to 150. These can easily be modified in the vae.py/lem.py for full paper replication if have access to a GPU.
+Note: The paper was run with 10000 epochs for VAE and LEM, but both are set to 1000 by default for CPU accessibility. The number of Langevin iterations is set to 150. These can easily be modified in vae.py/lem.py for full paper replication if you have access to a GPU.

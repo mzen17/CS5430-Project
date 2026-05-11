@@ -3,4 +3,5 @@ data
 **/__pycache__
 scrapper
 spatial
-paper.pdf
+output
+*.pdf

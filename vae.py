@@ -1,5 +1,6 @@
 ## ELBO Loss, Minibatch
 import math
+from pathlib import Path
 
 import torch
 import torch.nn.functional as F
@@ -12,6 +13,8 @@ from models.vdecoder import Decoder
 import torch
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
+output_dir = Path('output')
+output_dir.mkdir(exist_ok=True)
 
 # ----- DATA LOADING ----- #
 mnist_data = datasets.MNIST(
@@ -30,7 +33,7 @@ print(image_data.size()) # 60000 784
 
 # ----- TRAINING --------#
 epochs = 10000 # <- actually mini batches.
-batch_size =128
+batch_size = 64
 lr = 1e-3
 
 encoder = Encoder(10, 8).to(device)
@@ -63,30 +66,24 @@ for i in range(epochs):
     x_std = torch.exp(0.5 * x_logvar) # same thing for q(z|x) here
 
     # ELBO, dim=8
-    # we use K = 1
-    # ELBO = p(x, z)/q(z|x)
-    # log(ELBO) = p(z|x) + p(z) - q(z|x)
-    FST = -8 * 0.5 * math.log(2 * 3.14159)
-    FULLST = -784 * 0.5 * math.log(2 * 3.14159)
+    # ELBO = p(x|z) - dkl
+    # dkl is - sum [(uj^2) + o^2 - 1 - log(oj^2)]
+    pxz = 0.5 * (
+        x_logvar + ((batch - x_mean) ** 2) / torch.exp(x_logvar)
+    ).sum(dim=1).mean()
 
-    # top head p(x, z) = p(x|z) + p(z)
-    # p(z) is given by N(0, I). log(p(z)) = - k/2 ln[2pi] - 1/2 ln[det(cov)] - 1/2 sum([x]^2)
-    # p(x|z) is given by N(x_m, x_v) => log(p(x|z)) = - k/2 ln [2pi] - 1/2 ln[det(cov)] - 1/2 sum((x-u)^2/b)
-    pz = FST - 0.5 * torch.sum(zvals ** 2, dim=1)
-    det_xvar = torch.sum(x_logvar, dim =1) # sum since we took log
-    pxz = FULLST - 0.5 * det_xvar - 0.5 * torch.sum((batch - x_mean)**2/x_std**2, dim=1)
+    dkl = -0.5 * torch.sum(1 + z_logvar - z_mean.pow(2) - z_logvar.exp(), dim=1).mean()
+    negative_elbo = pxz + dkl
 
-    # q(z|x) is given by pdf(z) from N(mean, var)
-    det_zvar = torch.sum(z_logvar, dim=1) # sum since we took log
-    qzx = FST - 0.5 * det_zvar - 0.5 * torch.sum((zvals - z_mean)**2/torch.exp(z_logvar), dim=1)
-
-    negative_elbo  = torch.sum(-(pz + pxz - qzx))
-    if ( i % 10 == 0): 
-        print(f"Epoch {i} | {negative_elbo.item()}")
+    if i % 10 == 0:
+        print(f"epoch at {i} | DKL Loss: {negative_elbo}")
 
     negative_elbo.backward()
     encoder_optim.step()
     decoder_optim.step()
+
+torch.save(encoder.state_dict(), output_dir / 'encoder.pt')
+torch.save(decoder.state_dict(), output_dir / 'vae-decoder.pt')
 
 # sampling
 # we generate 5 samples and decode the shit

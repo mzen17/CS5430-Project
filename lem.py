@@ -1,11 +1,22 @@
 ## Langevin Approximation of Posterior, Minibatch
+from pathlib import Path
+
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import datasets, transforms
 import matplotlib.pyplot as plt
 
+from models.vencoder import Encoder
 from models.vdecoder import Decoder
+
+output_dir = Path('output')
+encoder_path = output_dir / 'encoder.pt'
+vae_decoder_path = output_dir / 'vae-decoder.pt'
+z_bank_path = output_dir / 'z-bank.pt'
+
+LOAD_FROM_ENCODER = True
+LOAD_PREV_DECODER = True
 
 # ----- DATA LOADING ----- #
 mnist_data = datasets.MNIST(
@@ -24,20 +35,29 @@ label_data = F.one_hot(all_labels, num_classes=10).float().to(device)
 print(image_data.size())
 
 # ----- TRAINING --------#
-epochs = 10000
-it_steps = 100
+epochs = 1000
+it_steps = 200
+m_steps = 3
 batch_size = 64
 lr = 1e-3
-lg_lr = 1e-4
+lg_lr = 1e-2
 
-# these are commented out because we no longer use the encoder
-# we only need the decoder
-# encoder = Encoder(10, 8)
-#encoder_optim = optim.Adam(encoder.parameters(), lr=lr)
+encoder = Encoder(10, 8).to(device)
+encoder.load_state_dict(torch.load(encoder_path, map_location=device))
+encoder.eval()
+
 decoder = Decoder(8, 10, device=device).to(device)
+if LOAD_PREV_DECODER:
+    decoder.load_state_dict(torch.load(vae_decoder_path, map_location=device))
 decoder_optim = optim.Adam(decoder.parameters(), lr=lr)
 
-z_bank = torch.randn(len(image_data), 8).to(device) # <- persistent z banks for the guys
+with torch.no_grad():
+    if LOAD_FROM_ENCODER:
+        z_mean, z_logvar = encoder(image_data, label_data)
+        z_std = torch.exp(0.5 * z_logvar)
+        z_bank = z_mean + torch.randn_like(z_std) * z_std
+    else:
+        z_bank = torch.randn(len(image_data), 8, device=device)
 
 for i in range(epochs):
     decoder_optim.zero_grad()
@@ -74,21 +94,37 @@ for i in range(epochs):
     # decoder updates
     # with no encoder, we just do a Gaussian NLL instead of KLD
     z = z.detach()
-    decoder_optim.zero_grad() # <- reset the guy just for safety
-
-    model_output, logvar = decoder(z, label_batch)
-
-    batch_loss = 0.5 * (
-        logvar + ((batch - model_output) ** 2) / torch.exp(logvar)
-    ).sum(dim=1).mean()
-    batch_loss.backward()
-
     z_bank[indices] = z.detach()
+
+    for m in range(m_steps):
+        decoder_optim.zero_grad()
+
+        model_output, logvar = decoder(z, label_batch)
+
+        batch_loss = 0.5 * (
+            logvar + ((batch - model_output) ** 2) / torch.exp(logvar)
+        ).sum(dim=1).mean()
+        batch_loss.backward()
+        decoder_optim.step()
 
     if i % 10 == 0:
         print(f"Epoch {i} loss: {batch_loss}")
 
-    decoder_optim.step()
+output_dir.mkdir(exist_ok=True)
+torch.save(decoder.state_dict(), output_dir / 'lem-decoder.pt')
+torch.save(
+    {
+        'z_bank': z_bank.detach().cpu(),
+        'labels': all_labels.cpu(),
+        'load_from_encoder': LOAD_FROM_ENCODER,
+        'load_prev_decoder': LOAD_PREV_DECODER,
+        'epochs': epochs,
+        'it_steps': it_steps,
+        'm_steps': m_steps,
+        'lg_lr': lg_lr,
+    },
+    z_bank_path,
+)
 
 # sampling
 generation = torch.tensor([1,2,5,3,4,4,1]).to(device)

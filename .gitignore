@@ -5,3 +5,9 @@ scrapper
 spatial
 output
 *.pdf
+
+# artifacts
+img.png
+latent-representations.png
+lem-nums.png
+vae-nums.png

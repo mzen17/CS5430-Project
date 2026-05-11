@@ -36,7 +36,7 @@ print(image_data.size())
 
 # ----- TRAINING --------#
 epochs = 1000
-it_steps = 200
+it_steps = 150
 m_steps = 3
 batch_size = 64
 lr = 1e-3
@@ -148,4 +148,4 @@ with torch.no_grad():
     print("z_bank norm mean:", z_bank.norm(dim=1).mean())
     print("standard normal norm expected ~", 8 ** 0.5)
 plt.tight_layout()
-plt.savefig('img.png')
+plt.savefig('lem-nums.png')

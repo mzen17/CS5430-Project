@@ -32,7 +32,7 @@ label_data = F.one_hot(all_labels, num_classes=10).float().to(device)
 print(image_data.size()) # 60000 784
 
 # ----- TRAINING --------#
-epochs = 10000 # <- actually mini batches.
+epochs = 1000 # <- actually mini batches.
 batch_size = 64
 lr = 1e-3
 
@@ -106,4 +106,4 @@ for i in range(SAMPLE_COUNT):
     axes[i].set_title(f"Sample {i+1}")
 
 plt.tight_layout()
-plt.savefig('img.png')
+plt.savefig('vae-nums.png')

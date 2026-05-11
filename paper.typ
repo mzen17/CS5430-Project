@@ -1,27 +1,21 @@
-= MINST Number Generation with VAE vs Langevin Sampling Expectation Maximization
+= MNIST Number Generation with VAE vs Langevin Sampling Expectation-Maximization
 
 Mike Zeng \<mzeng5\@uiowa.edu\>
 
 == Introduction
-This report compares the use of variational autoencoders to an EM-algorithm like approach using Langevin sampling. I compare latent space and the final output of the generated images using the MINST dataset comprised of 67000 28x28 images of numbers from 0-9 colored in grayscale. 
+This report compares variational autoencoders to an EM-like approach using Langevin sampling. We compare the latent space and the final generated images using the MNIST dataset, which contains 70,000 28x28 grayscale images of digits from 0-9. 
 #image("images/demo.png")
 == Design and Methods
 === Variational Autoencoder
-We tested with a CVAE, a class-conditioned variational autoencoder. The encoding model takes in an linear vector of 784 floats scaled between 0 and 1 alongside a onehot class tensor representing digits 0-9. 
+We tested with a CVAE, a class-conditioned variational autoencoder. The encoding model takes in a linear vector of 784 floats scaled between 0 and 1 alongside a one-hot class tensor representing digits 0-9. 
 
-The variational autoencoder uses 3 layers for the encoding model of dimensions 784x256, 256x64, and 64x8. Notice the latent dimension is $8$. The decoder uses 2 layers of 8x64, 64x784. The variance is fixed at 0. Initally, the model was tested with learned variance but training ended up highly instable with the KLD exploding. It outputs fixed log variance of $0$ instead, aka variance = I.
+The variational autoencoder uses 3 layers for the encoding model of dimensions 794x256, 256x64, and 64x8. Notice the latent dimension is $8$. The decoder uses 3 linear layers of 18x64, 64x256 and 256x784. Each of these are connected by ReLu. The reported experiments use a fixed decoder log variance of $0$, i.e. variance $I$. Initially, the model was tested with learned variance, but training became unstable and the KL term produced NaNs. However, all loss calculations are used with variance.
 
-Let the ELBO be defined as $log p_theta (x, z) - D_"kl" [ q(z|x) || p(z)] ~ D_"kl" [q(z|x) || p_theta (z|x)]$, where both are Guassians. We note that we simplify the KL term, since both are Guassians. From homework 1, we recall that the KLD between two single variate Gaussians for a latent dimension $j$ is:
-$ ln s_z/sigma_theta - 1/2 + (sigma_theta^2 + (mu_theta -mu_z)^2)/(2sigma_z^2)  $
-Since $p(z)$ has variance of I, our formula becomes:
-$ -1/2ln sigma_theta - 1/2 + 1/2 (sigma_theta^2 + (mu_theta -mu_z)^2)  $
-$ - 1/2 (1 - sigma_theta^2- mu_theta^2 - mu_z^2 +2 mu_theta mu_z +ln sigma_theta)  $
-Since $mu_z = 0$ because $p(z) in N(0, 1)$, this becomes:
-$ - 1/2 (1 - sigma_theta^2 - mu_theta^2 +ln sigma_theta) $
-Doing a summation of this over all latents gives us our KL term:
-$ sum_j - 1/2 (1 - sigma_j^2 - mu_j^2 +ln sigma_j)  $
+Let the ELBO be defined as $E_(q_phi(z|x)) [log p_theta(x|z)] - D_"KL" [q_phi (z|x) || p(z)]$. We use $q_phi (z|x) = N(mu, "diag"(sigma^2))$ and $p(z)=N(0,I)$, so the KL term has the closed form:
+$ D_"KL" [q_phi (z|x) || p(z)] = -1/2 sum_j (1 + log sigma_j^2 - mu_j^2 - sigma_j^2) $
+The training objective is the negative ELBO, i.e. the reconstruction negative log-likelihood plus this KL term.
 
-Now to obtain $log p_theta (x)$, we note that because $p_theta (x)$ is a Guassian with $mu$ and fixed variance $I$, we have:
+For the reconstruction term, we use a Gaussian observation model with decoder mean $mu$ and fixed variance $I$:
 $
 p_theta (x | mu, I)
 =
@@ -44,40 +38,37 @@ $
 $
 log p_theta (x | mu, I)
 =
-d/2 log(2pi) 
-  -frac(1, 2)
-  (x - mu)^2
-)
+-d/2 log(2pi) 
+	  -frac(1, 2)
+	  (x - mu)^2
 $
 
-This gives us our reconstruction term, where $x$ is our data and $mu$ is taken from the decoder head. Our loss is reconstruction term + kl term.
+This gives us our reconstruction term, where $x$ is our data and $mu$ is taken from the decoder head. Our loss is the negative reconstruction log-likelihood plus the KL term.
 
 === EM Algorithm
-Here, we remove the encoder as rather than training a model for $q(z|x)$, we use an E-step like approach for finding an approximate representation of $p(z|x)$. The decoder is trained with the latents from the E-step and its parameters are hence updated in the M-step.
+Here, we remove the encoder from the EM training loop. Rather than training a model for $q(z|x)$, we use an E-step-like approach to find an approximate representation of $p(z|x)$. The decoder is trained with the latents from the E-step, and its parameters are updated in the M-step.
 
 === Langevin Sampling for E-step
 Formally, we replace the encoder $q_lambda (z|x)$ with Langevin sampling to approximate the posterior $p(z|x)$. Given a latent representation, we can find a better representation as follows:
-$ z_(t+1) = z_t + nabla log p(z|x) + sqrt(2 eta )epsilon $
+$ z_(t+1) = z_t + eta nabla log p(z|x) + sqrt(2 eta )epsilon $
 Thus, our sampling iteration becomes:
-$ z_(t+1) = z_t + nabla log p(z) + nabla log p(x|z) + sqrt(2 eta) epsilon $ 
+$ z_(t+1) = z_t + eta (nabla log p(z) + nabla log p(x|z)) + sqrt(2 eta) epsilon $ 
 
 If we let $p(z)$ be a Gaussian of $z in N(0, I)$, we have that 
 
-$ log p(z) = -n/2 log(2pi) - 1/2 ||mu-z|| $
-$ nabla log p(z) =  -1/2  2 (mu-z)nabla (mu-z) $
-$ nabla log p(z) =  - (0-z)(-1) $
+$ log p(z) = -n/2 log(2pi) - 1/2 ||z||^2 $
+$ nabla log p(z) =  -1/2 nabla ||z||^2 $
+$ nabla log p(z) =  -1/2 (2z) $
 $ nabla log p(z) =  - z $
 
-hence the first term becomes $-z$. The second term relies on our decoder model $p(x|z)$, so we obtain this through the gradient function of Pytorch. This can be done by feeding the latent through the decoder model. After our decoder model generates the mean and variance, we obtain $p_theta (x|z)$, and hence we can obtain the negative log-likelihood of observing $x$, then use `autograd.grad` to obtain the gradient. Hence, our update step becomes:
-$ z_(t+1) = z_t - z + nabla log p(x|z) + sqrt(2 eta) epsilon $ 
+hence the first term becomes $-z$. The second term relies on our decoder model $p(x|z)$, so we obtain this through the gradient function of PyTorch. This can be done by feeding the latent through the decoder model. After our decoder model generates the mean and variance, we compute $log p_theta (x|z)$ and use `autograd.grad` to obtain the gradient. Hence, our update step becomes:
+$ z_(t+1) = z_t + eta (-z + nabla log p(x|z)) + sqrt(2 eta) epsilon $ 
 Note that the $-z$ pulls the update closer to 0 while the $nabla log p(x|z)$ pulls the log-likelihood of generating the data $x$ higher.
 
-I found that using randomly initialized vectors for the starting $z$ resulted in the model having poor performance, so I trained the EM-approximation setup with $z$ initialized from the encoding model with its weights frozen.
+We found that using randomly initialized vectors for the starting $z$ resulted in the model having poor performance, so we trained the EM-approximation setup with $z$ initialized from the encoding model with its weights frozen. We did 200 sampling steps.
 
 === M-step Update
-Using the finalized latent $z$, we update our decoder. Using the batch group $b$, we take the negative gaussian likelihood of our batch as our loss. The decoder is updated using the Adam optimizer on the loss. 
-
-
+Using the finalized latent $z$, we update our decoder. Using the batch group $b$, we take the negative Gaussian likelihood of our batch as our loss. The decoder is updated using the Adam optimizer on the loss. Our M-step count was $3$, so we did 3 gradient descends per E-step.
 
 
 == Results
@@ -85,17 +76,16 @@ Using the finalized latent $z$, we update our decoder. Using the batch group $b$
 We list the batch generations for each configuration. More generations can be found in https://github.com/mzen17/CS5430-Project/examples.
 
 
-==== EM-approximation with Langevin, 10000 minibatch descends with 64 image batch, 150 iterations
+==== EM-approximation with Langevin, 10000 minibatch updates with 64 image batch, 150 iterations
 #image("images/lem-10k.png")
 
-==== VAE with 10000 minibatch descends, 64 image batch
+==== VAE with 10000 minibatch updates, 64 image batch
 #image("images/vae10k.png")
 === Internal Representations
-I visualize 1000 latents from the finalized z-bank for the Langevin sampling approach doing another 150 steps. VAE encoder latents are generated by plugging the MINST into the encoder.
+We visualize 1000 latents from the finalized z-bank for the Langevin sampling approach. VAE encoder latents are generated by passing MNIST images into the encoder.
 #image("images/latents.png")
-#pagebreak()
 === Log likelihood Approximations
-log p(x|z) was approximated using 10000 z samples. We visualize the likelihood here:
+$log p(x)$ was approximated using 10000 prior samples of $z$. We visualize the likelihood here:
 #table(
   columns: (auto, auto, auto, auto, auto),
   inset: 10pt,
@@ -117,6 +107,15 @@ log p(x|z) was approximated using 10000 z samples. We visualize the likelihood h
 The models were trained on an NVIDIA RTX 5070 Ti. The LEM model took around 3 minutes to train for 10000 steps while the VAE took about 20 seconds to train.
 
 == Analysis
-Overall, the likelihood of the data had little changes regardless of Langevin sampling VS VAE encoding. However, the latents produced by the VAE seemed to be a lot more clustered, wherevers the latents by the Langevin sampling was more randomly distributed.
+Overall, the likelihood of the data changed little between Langevin sampling and VAE encoding. The mean test log-likelihoods are nearly identical in the table, suggesting that the EM-trained decoder did not find a substantially better marginal model than the VAE decoder under this architecture and fixed-variance Gaussian observation model.
 
-The picture quality of the numbers were relatively similar. The Langevin sampling did produce sharper pictures, although it is not seen here because it occured by random chance. At lower training minibatches, Langevin sampling had much better and sharper images. However, the most noticeable thing was the training time. Using the Langevin sampling, it was around a 10x slowdown compared to training the VAE.
+The more interesting difference is in the latent representations. The VAE latents appear more clustered by digit class, which is expected because the encoder directly learns a smooth amortized map from images to latent variables. The Langevin latents from the z-bank are less cleanly clustered. This makes sense because they are not produced by n encoder network; they are persistent latent variables refined by posterior sampling. 
+
+The picture quality of the numbers was relatively similar. Langevin sampling did produce sharper pictures in some runs, although this is not consistently visible here because generation depends on random samples. At lower numbers of training minibatches, Langevin sampling had better and sharper images. This suggests that initializing from the VAE and then refining the decoder with posterior samples can be useful early in training, but the advantage becomes smaller after enough VAE training.
+
+The most noticeable difference was training time. Langevin sampling was around a 10x slowdown compared to training the VAE. This is expected because each minibatch requires many inner-loop gradient computations with respect to $z$, while the VAE obtains latents with a single encoder forward pass. Thus, the EM approximation trades amortized inference speed for a more direct but much more expensive posterior sampling procedure.
+
+== Conclusion
+The experiment shows that approximate EM with Langevin sampling is a workable alternative to standard VAE training on MNIST, but it is not clearly better in this setting. The EM-trained model produced comparable samples and nearly identical estimated test likelihoods, but while requiring substantially more computation. Overall, the VAE remains the more practical method for this small image generation task.
+
+Code: https://github.com/mzen17/CS5430-Project

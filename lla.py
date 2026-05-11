@@ -137,39 +137,35 @@ def plot_likelihoods(labels, vae_ll, lem_ll):
     plt.savefig(plot_path, dpi=200, bbox_inches='tight')
 
 
-def main():
-    require_checkpoint(vae_decoder_path)
-    require_checkpoint(lem_decoder_path)
-    output_dir.mkdir(exist_ok=True)
+require_checkpoint(vae_decoder_path)
+require_checkpoint(lem_decoder_path)
+output_dir.mkdir(exist_ok=True)
 
-    images, labels, onehot_labels = load_test_data()
-    vae_decoder = load_decoder(vae_decoder_path)
-    lem_decoder = load_decoder(lem_decoder_path)
+images, labels, onehot_labels = load_test_data()
+vae_decoder = load_decoder(vae_decoder_path)
+lem_decoder = load_decoder(lem_decoder_path)
 
-    vae_ll = estimate_log_likelihood(vae_decoder, images, onehot_labels)
-    lem_ll = estimate_log_likelihood(lem_decoder, images, onehot_labels)
+vae_ll = estimate_log_likelihood(vae_decoder, images, onehot_labels)
+lem_ll = estimate_log_likelihood(lem_decoder, images, onehot_labels)
 
-    torch.save(
-        {
-            'labels': labels,
-            'vae_log_likelihood': vae_ll,
-            'lem_log_likelihood': lem_ll,
-            'image_count': image_count,
-            'latent_samples': latent_samples,
-            'latent_batch_size': latent_batch_size,
-        },
-        results_path,
-    )
-    write_table(labels, vae_ll, lem_ll)
-    plot_likelihoods(labels, vae_ll, lem_ll)
+torch.save(
+    {
+        'labels': labels,
+        'vae_log_likelihood': vae_ll,
+        'lem_log_likelihood': lem_ll,
+        'image_count': image_count,
+        'latent_samples': latent_samples,
+        'latent_batch_size': latent_batch_size,
+    },
+    results_path,
+)
+write_table(labels, vae_ll, lem_ll)
+plot_likelihoods(labels, vae_ll, lem_ll)
 
-    print(f"VAE mean log p(x): {vae_ll.mean().item():.4f}")
-    print(f"LEM mean log p(x): {lem_ll.mean().item():.4f}")
-    print(f"LEM - VAE: {(lem_ll.mean() - vae_ll.mean()).item():.4f}")
-    print(f"saved results to {results_path}")
-    print(f"saved table to {table_path}")
-    print(f"saved plot to {plot_path}")
+print(f"VAE mean log p(x): {vae_ll.mean().item():.4f}")
+print(f"LEM mean log p(x): {lem_ll.mean().item():.4f}")
+print(f"LEM - VAE: {(lem_ll.mean() - vae_ll.mean()).item():.4f}")
+print(f"saved results to {results_path}")
+print(f"saved table to {table_path}")
+print(f"saved plot to {plot_path}")
 
-
-if __name__ == '__main__':
-    main()

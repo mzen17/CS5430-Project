@@ -127,43 +127,38 @@ def plot_latents(encoder_z, lem_z, labels):
     plt.savefig(plot_path, dpi=200, bbox_inches='tight')
 
 
-def main():
-    require_checkpoint(encoder_path)
-    output_dir.mkdir(exist_ok=True)
+require_checkpoint(encoder_path)
+output_dir.mkdir(exist_ok=True)
 
-    images, labels, onehot_labels = load_data()
+images, labels, onehot_labels = load_data()
 
-    encoder = Encoder(10, 8).to(device)
-    encoder.load_state_dict(torch.load(encoder_path, map_location=device))
+encoder = Encoder(10, 8).to(device)
+encoder.load_state_dict(torch.load(encoder_path, map_location=device))
 
-    vae_z = encoder_latents(encoder, images, onehot_labels)
+vae_z = encoder_latents(encoder, images, onehot_labels)
 
-    if z_bank_path.exists():
-        lem_z, z_bank_labels = load_z_bank_latents()
-        if z_bank_labels is not None:
-            labels = z_bank_labels
-    else:
-        require_checkpoint(lem_decoder_path)
-        lem_decoder = Decoder(8, 10, device=device).to(device)
-        lem_decoder.load_state_dict(torch.load(lem_decoder_path, map_location=device))
-        lem_z = langevin_latents(lem_decoder, images, onehot_labels)
+if z_bank_path.exists():
+    lem_z, z_bank_labels = load_z_bank_latents()
+    if z_bank_labels is not None:
+        labels = z_bank_labels
+else:
+    require_checkpoint(lem_decoder_path)
+    lem_decoder = Decoder(8, 10, device=device).to(device)
+    lem_decoder.load_state_dict(torch.load(lem_decoder_path, map_location=device))
+    lem_z = langevin_latents(lem_decoder, images, onehot_labels)
 
-    torch.save(
-        {
-            'labels': labels,
-            'vae_encoder_latents': vae_z.cpu(),
-            'lem_z_bank_latents': lem_z.cpu(),
-            'it_samples': it_samples,
-            'lg_lr': lg_lr,
-            'used_saved_z_bank': z_bank_path.exists(),
-        },
-        latents_path,
-    )
-    plot_latents(vae_z, lem_z, labels)
+torch.save(
+    {
+        'labels': labels,
+        'vae_encoder_latents': vae_z.cpu(),
+        'lem_z_bank_latents': lem_z.cpu(),
+        'it_samples': it_samples,
+        'lg_lr': lg_lr,
+        'used_saved_z_bank': z_bank_path.exists(),
+    },
+    latents_path,
+)
+plot_latents(vae_z, lem_z, labels)
 
-    print(f"saved latents to {latents_path}")
-    print(f"saved plot to {plot_path}")
-
-
-if __name__ == '__main__':
-    main()
+print(f"saved latents to {latents_path}")
+print(f"saved plot to {plot_path}")

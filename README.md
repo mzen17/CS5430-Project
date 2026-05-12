@@ -2,7 +2,7 @@
 <img width="2208" height="428" alt="image" src="https://github.com/user-attachments/assets/29b90632-a5de-4337-abae-b5169b52eb9b" />
 
 ## Running the code
-To run, please run in the specific manner:
+To get results, please run in the specific manner:
 ```uv run python main.py```
 
 To run an individual component:
